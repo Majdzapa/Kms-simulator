@@ -1,0 +1,7 @@
+target/
+kms-console/node_modules/
+kms-console/dist/
+.DS_Store
+*.log
+.idea/
+.vscode/

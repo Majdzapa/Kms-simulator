@@ -1,0 +1,97 @@
+# =============================================================================
+# KMS Simulator — Standalone Deployment (Decoupled from OCSP Responder)
+# Publishes certificate lifecycle events exclusively via RabbitMQ Outbox Relay
+# =============================================================================
+networks:
+  ocsp-shared-net:
+    name: ocsp-net
+    external: true
+
+volumes:
+  kms-mariadb-data:
+
+services:
+  kms-mariadb:
+    image: mariadb:10.11
+    container_name: kms-mariadb
+    restart: unless-stopped
+    networks: [ocsp-shared-net]
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpassword}
+      MARIADB_DATABASE:      kms
+      MARIADB_USER:          kms_app
+      MARIADB_PASSWORD:      ${MARIADB_KMS_PASSWORD:-changeme}
+    ports:
+      - "3308:3306"
+    volumes:
+      - kms-mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 20s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  kms-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: incert/kms-simulator:local
+    container_name: kms-simulator
+    restart: unless-stopped
+    networks: [ocsp-shared-net]
+    depends_on:
+      kms-mariadb:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    environment:
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+      MARIADB_HOST: ${MARIADB_HOST:-kms-mariadb}
+      MARIADB_PORT: ${MARIADB_PORT:-3306}
+      MARIADB_KMS_DB: kms
+      MARIADB_KMS_USER: kms_app
+      MARIADB_KMS_PASSWORD: ${MARIADB_KMS_PASSWORD:-changeme}
+      FLYWAY_USER: root
+      FLYWAY_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpassword}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5671}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-ocsp_amqp}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-changeme}
+      RABBITMQ_TLS_ENABLED: ${RABBITMQ_TLS_ENABLED:-true}
+      RABBITMQ_SSL_ENABLED: ${RABBITMQ_TLS_ENABLED:-true}
+      RABBITMQ_SSL_KEYSTORE: file:/certs/rabbitmq/client-keystore.p12
+      RABBITMQ_SSL_KEYSTORE_PASSWORD: ${RABBITMQ_SSL_KEYSTORE_PASSWORD:-changeme}
+      RABBITMQ_SSL_TRUSTSTORE: file:/certs/rabbitmq/client-truststore.p12
+      RABBITMQ_SSL_TRUSTSTORE_PASSWORD: ${RABBITMQ_SSL_TRUSTSTORE_PASSWORD:-changeme}
+      KMS_PORT: 8090
+      KMS_JOB_REVOCATION_ENABLED: "false"
+    volumes:
+      - ./data/pki:/app/data/pki
+      - ./certs/rabbitmq:/certs/rabbitmq:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8090/actuator/health || exit 1"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  kms-console:
+    build:
+      context: ./kms-console
+      dockerfile: Dockerfile
+    image: incert/kms-console:local
+    container_name: kms-console
+    restart: unless-stopped
+    networks: [ocsp-shared-net]
+    depends_on:
+      kms-simulator:
+        condition: service_healthy
+    ports:
+      - "3001:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
+      start_period: 10s
+      interval: 15s
+      timeout: 5s
+      retries: 3
