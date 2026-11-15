@@ -18,11 +18,13 @@ import {
 import {
   IconCertificate,
   IconArrowsExchange,
+  IconBook,
   IconExternalLink,
   IconKey,
 } from '@tabler/icons-react'
 import { KmsCertificatesPage } from './pages/KmsCertificatesPage'
 import { OutboxMonitorPage } from './pages/OutboxMonitorPage'
+import { DeploymentDocsPage } from './pages/DeploymentDocsPage'
 
 const NAV_ITEMS = [
   {
@@ -36,6 +38,12 @@ const NAV_ITEMS = [
     label: 'RabbitMQ Outbox Relay',
     description: 'Transactional outbox & event stream sync',
     icon: IconArrowsExchange,
+  },
+  {
+    to: '/docs',
+    label: 'Architecture & Deployment',
+    description: 'How to build, deploy & connect KMS to RabbitMQ',
+    icon: IconBook,
   },
 ]
 
@@ -200,6 +208,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<KmsCertificatesPage />} />
           <Route path="/outbox" element={<OutboxMonitorPage />} />
+          <Route path="/docs" element={<DeploymentDocsPage />} />
         </Routes>
       </AppShell.Main>
     </AppShell>
