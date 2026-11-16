@@ -210,3 +210,4 @@ docker compose down
 # Stop containers and wipe KMS database volume (re-seeds 50 certificates on next startup)
 docker compose down -v
 ```
+
