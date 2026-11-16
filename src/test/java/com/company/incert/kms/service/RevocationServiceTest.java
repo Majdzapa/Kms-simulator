@@ -2,11 +2,8 @@ package com.company.incert.kms.service;
 
 import com.company.incert.kms.entity.Certificate;
 import com.company.incert.kms.entity.CertificateStatus;
-import com.company.incert.kms.entity.OutboxEvent;
 import com.company.incert.kms.entity.RevocationReason;
 import com.company.incert.kms.repository.CertificateRepository;
-import com.company.incert.kms.repository.OutboxEventRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,20 +18,16 @@ import static org.mockito.Mockito.*;
 class RevocationServiceTest {
 
     private CertificateRepository certRepository;
-    private OutboxEventRepository outboxRepository;
-    private ObjectMapper objectMapper;
     private RevocationService service;
 
     @BeforeEach
     void setUp() {
         certRepository = mock(CertificateRepository.class);
-        outboxRepository = mock(OutboxEventRepository.class);
-        objectMapper = new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-        service = new RevocationService(certRepository, outboxRepository, objectMapper);
+        service = new RevocationService(certRepository);
     }
 
     @Test
-    void revoke_validCert_updatesStatusAndSavesOutboxEvent() {
+    void revoke_validCert_updatesStatusAndIncrementsSequence() {
         Certificate cert = Certificate.builder()
                 .serialNumberHex("01a2b3")
                 .status(CertificateStatus.GOOD)
@@ -48,7 +41,7 @@ class RevocationServiceTest {
         assertThat(result.getStatus()).isEqualTo(CertificateStatus.REVOKED);
         assertThat(result.getRevocationReason()).isEqualTo(RevocationReason.KEY_COMPROMISE);
         assertThat(result.getSequence()).isEqualTo(2L);
-        verify(outboxRepository, times(1)).save(any(OutboxEvent.class));
+        verify(certRepository, times(1)).save(cert);
     }
 
     @Test
@@ -58,7 +51,7 @@ class RevocationServiceTest {
         assertThatThrownBy(() -> service.revoke("unknown", RevocationReason.UNSPECIFIED))
                 .isInstanceOf(RevocationService.CertificateNotFoundException.class)
                 .hasMessageContaining("Certificate not found");
-        verify(outboxRepository, never()).save(any());
+        verify(certRepository, never()).save(any());
     }
 
     @Test
@@ -79,6 +72,6 @@ class RevocationServiceTest {
         assertThat(result.getRevocationReason()).isNull();
         assertThat(result.getRevocationTime()).isNull();
         assertThat(result.getSequence()).isEqualTo(3L);
-        verify(outboxRepository, times(1)).save(any(OutboxEvent.class));
+        verify(certRepository, times(1)).save(cert);
     }
 }

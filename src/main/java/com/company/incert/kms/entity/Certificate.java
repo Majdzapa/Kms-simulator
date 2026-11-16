@@ -1,5 +1,6 @@
 package com.company.incert.kms.entity;
 
+import com.company.incert.kms.messaging.CertificateStatusEntityListener;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,6 +10,7 @@ import java.time.Instant;
  * JPA entity representing a certificate managed in the KMS inventory.
  */
 @Entity
+@EntityListeners(CertificateStatusEntityListener.class)
 @Table(name = "certificate",
         uniqueConstraints = @UniqueConstraint(name = "uq_serial", columnNames = "serial_number_hex"))
 @Getter
@@ -59,6 +61,22 @@ public class Certificate {
 
     @Column(name = "sequence", nullable = false)
     private long sequence;
+
+    @Transient
+    private CertificateStatus loadedStatus;
+
+    @Transient
+    private long loadedSequence = -1L;
+
+    @PostLoad
+    public void snapshotState() {
+        this.loadedStatus = this.status;
+        this.loadedSequence = this.sequence;
+    }
+
+    public boolean hasStatusOrSequenceChanged() {
+        return this.loadedStatus != this.status || this.loadedSequence != this.sequence;
+    }
 
     // Record-style accessor aliases for convenience & backwards compatibility
     public String serialNumberHex() { return serialNumberHex; }

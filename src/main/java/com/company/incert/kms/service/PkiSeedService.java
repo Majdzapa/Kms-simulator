@@ -2,13 +2,8 @@ package com.company.incert.kms.service;
 
 import com.company.incert.kms.entity.Certificate;
 import com.company.incert.kms.entity.CertificateStatus;
-import com.company.incert.kms.entity.CertificateStatusEvent;
-import com.company.incert.kms.entity.OutboxEvent;
 import com.company.incert.kms.entity.RevocationReason;
 import com.company.incert.kms.repository.CertificateRepository;
-import com.company.incert.kms.repository.OutboxEventRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
@@ -52,8 +47,6 @@ import java.util.*;
 public class PkiSeedService {
 
     private final CertificateRepository certRepository;
-    private final OutboxEventRepository outboxRepo;
-    private final ObjectMapper objectMapper;
 
     static {
         if (Security.getProvider("BC") == null) {
@@ -238,8 +231,7 @@ public class PkiSeedService {
         }
 
         for (Certificate cert : certsToSave) {
-            Certificate saved = certRepository.save(cert);
-            writeOutbox(CertificateStatusEvent.from(saved));
+            certRepository.save(cert);
         }
     }
 
@@ -261,24 +253,6 @@ public class PkiSeedService {
                 return converter.getPrivateKey(pki);
             }
             throw new IllegalArgumentException("Unsupported private key format in " + path);
-        }
-    }
-
-    private void writeOutbox(CertificateStatusEvent event) {
-        try {
-            String payload = objectMapper.writeValueAsString(event);
-            String eventKey = event.issuerKeyHashHex() + ":" + event.serialNumberHex();
-            OutboxEvent outbox = OutboxEvent.builder()
-                    .eventId(event.eventId())
-                    .topic("incert.certificate.status.v1")
-                    .eventKey(eventKey)
-                    .payload(payload)
-                    .createdAt(Instant.now())
-                    .sent(false)
-                    .build();
-            outboxRepo.save(outbox);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize outbox event during seeding", e);
         }
     }
 

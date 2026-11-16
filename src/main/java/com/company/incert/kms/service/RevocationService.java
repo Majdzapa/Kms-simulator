@@ -2,13 +2,8 @@ package com.company.incert.kms.service;
 
 import com.company.incert.kms.entity.Certificate;
 import com.company.incert.kms.entity.CertificateStatus;
-import com.company.incert.kms.entity.CertificateStatusEvent;
-import com.company.incert.kms.entity.OutboxEvent;
 import com.company.incert.kms.entity.RevocationReason;
 import com.company.incert.kms.repository.CertificateRepository;
-import com.company.incert.kms.repository.OutboxEventRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,7 +14,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Core service managing certificate lifecycles, status transitions, and outbox event persistence.
+ * Core service managing certificate lifecycles and status transitions.
+ * Outbox events are emitted automatically by {@code CertificateStatusEntityListener}
+ * whenever a certificate is persisted or its status/sequence changes.
  */
 @Slf4j
 @Service
@@ -27,10 +24,6 @@ import java.util.Optional;
 public class RevocationService {
 
     private final CertificateRepository certRepository;
-    private final OutboxEventRepository outboxRepo;
-    private final ObjectMapper objectMapper;
-
-    private static final String DEFAULT_TOPIC = "incert.certificate.status.v1";
 
     @Transactional(readOnly = true)
     public List<Certificate> listAll() {
@@ -91,7 +84,6 @@ public class RevocationService {
         cert.setSequence(cert.getSequence() + 1);
 
         Certificate saved = certRepository.save(cert);
-        writeOutbox(CertificateStatusEvent.from(saved));
         log.info("Revoked certificate serial={} reason={} seq={}", serialHex, reason, saved.getSequence());
         return saved;
     }
@@ -112,7 +104,6 @@ public class RevocationService {
         cert.setSequence(cert.getSequence() + 1);
 
         Certificate saved = certRepository.save(cert);
-        writeOutbox(CertificateStatusEvent.from(saved));
         log.info("Unrevoked certificate serial={} seq={}", serialHex, saved.getSequence());
         return saved;
     }
@@ -140,7 +131,6 @@ public class RevocationService {
         cert.setSequence(cert.getSequence() + 1);
 
         Certificate saved = certRepository.save(cert);
-        writeOutbox(CertificateStatusEvent.from(saved));
         log.info("Updated certificate status serial={} status={} reason={} seq={}",
                 serialHex, targetStatus, finalReason, saved.getSequence());
         return saved;
@@ -152,31 +142,11 @@ public class RevocationService {
         int queued = 0;
         for (Certificate cert : certs) {
             cert.setSequence(cert.getSequence() + 1);
-            Certificate saved = certRepository.save(cert);
-            writeOutbox(CertificateStatusEvent.from(saved));
+            certRepository.save(cert);
             queued++;
         }
         log.info("Re-queued sync events for all {} certificates", queued);
         return queued;
-    }
-
-    private void writeOutbox(CertificateStatusEvent event) {
-        try {
-            String payload = objectMapper.writeValueAsString(event);
-            String eventKey = event.issuerKeyHashHex() + ":" + event.serialNumberHex();
-            OutboxEvent outbox = OutboxEvent.builder()
-                    .eventId(event.eventId())
-                    .topic(DEFAULT_TOPIC)
-                    .eventKey(eventKey)
-                    .payload(payload)
-                    .createdAt(Instant.now())
-                    .sent(false)
-                    .build();
-            outboxRepo.save(outbox);
-            log.debug("Outbox event written: id={} key={}", event.eventId(), eventKey);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize outbox event", e);
-        }
     }
 
     public static class CertificateNotFoundException extends RuntimeException {
@@ -185,4 +155,3 @@ public class RevocationService {
         }
     }
 }
-
