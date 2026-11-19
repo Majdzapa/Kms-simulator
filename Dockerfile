@@ -14,8 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-RUN mkdir -p /data/pki
-
 COPY --from=build /build/target/kms-simulator-*.jar app.jar
 
 EXPOSE 8090

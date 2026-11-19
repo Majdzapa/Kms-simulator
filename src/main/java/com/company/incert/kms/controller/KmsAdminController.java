@@ -5,7 +5,6 @@ import com.company.incert.kms.entity.CertificateStatus;
 import com.company.incert.kms.entity.RevocationReason;
 import com.company.incert.kms.repository.OutboxEventRepository;
 import com.company.incert.kms.service.OutboxRelayService;
-import com.company.incert.kms.service.RevocationJob;
 import com.company.incert.kms.service.RevocationService;
 import com.company.incert.kms.service.RevocationService.CertificateNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,7 +41,6 @@ public class KmsAdminController {
 
     private final RevocationService revocationService;
     private final OutboxRelayService outboxRelay;
-    private final RevocationJob revocationJob;
     private final OutboxEventRepository outboxRepository;
 
     @Operation(summary = "List all certificates", description = "Retrieves the complete inventory of managed certificates and their current statuses")
@@ -175,24 +173,6 @@ public class KmsAdminController {
                 "count", queued,
                 "timestamp", Instant.now()
         ));
-    }
-
-    @Operation(summary = "Trigger random revocation", description = "Manually triggers the background revocation simulation job once")
-    @ApiResponse(responseCode = "200", description = "Simulation job triggered")
-    @PostMapping("/certificates/trigger-revocation")
-    public ResponseEntity<Map<String, String>> triggerRevocation() {
-        revocationJob.runNow();
-        outboxRelay.relay();
-        return ResponseEntity.ok(Map.of("status", "Revocation job triggered"));
-    }
-
-    @Operation(summary = "Run background revocation job", description = "Alias to trigger the background revocation simulation job once")
-    @ApiResponse(responseCode = "200", description = "Simulation job triggered")
-    @PostMapping("/jobs/revocation/run")
-    public ResponseEntity<Map<String, String>> runJob() {
-        revocationJob.runNow();
-        outboxRelay.relay();
-        return ResponseEntity.ok(Map.of("status", "Revocation job executed"));
     }
 
     @Data

@@ -65,9 +65,8 @@ services:
       RABBITMQ_SSL_TRUSTSTORE: file:/certs/rabbitmq/client-truststore.p12
       RABBITMQ_SSL_TRUSTSTORE_PASSWORD: ${RABBITMQ_SSL_TRUSTSTORE_PASSWORD:-changeme}
       KMS_PORT: 8090
-      KMS_JOB_REVOCATION_ENABLED: "false"
+      KMS_OCSP_URL: ${KMS_OCSP_URL:-http://localhost:8080/ocsp}
     volumes:
-      - ./data/pki:/app/data/pki
       - ./certs/rabbitmq:/certs/rabbitmq:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8090/actuator/health || exit 1"]

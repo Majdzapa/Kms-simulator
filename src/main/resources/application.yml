@@ -71,11 +71,9 @@ kms:
     dead-letter-queue: ocsp.certificate.status.dlq
   outbox:
     relay-delay-ms: 500
-  job:
-    revocation:
-      enabled: ${KMS_JOB_REVOCATION_ENABLED:true}
-      cron: "${KMS_JOB_REVOCATION_CRON:0/30 * * * * *}"
-      seed: ${KMS_JOB_REVOCATION_SEED:-1}
+  ocsp:
+    # Written into the Authority Information Access extension of issued certificates
+    responder-url: ${KMS_OCSP_URL:http://localhost:8080/ocsp}
 
 logging:
   level:

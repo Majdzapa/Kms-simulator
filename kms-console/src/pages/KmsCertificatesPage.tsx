@@ -27,7 +27,6 @@ import {
   IconShieldCheck,
   IconShieldX,
   IconPlayerPause,
-  IconPlayerPlay,
   IconCopy,
   IconDownload,
   IconEye,
@@ -43,7 +42,6 @@ import {
   revokeKmsCertificate,
   unrevokeKmsCertificate,
   updateKmsCertificateStatus,
-  triggerKmsRevocationJob,
 } from '../api/client'
 import type { KmsCertificate, KmsRevocationReason } from '../types/api'
 
@@ -220,9 +218,6 @@ export function KmsCertificatesPage() {
   const [copiedPem, setCopiedPem] = useState<boolean>(false)
   const [copiedSerial, setCopiedSerial] = useState<string | null>(null)
 
-  // Simulator Job Trigger
-  const [jobTriggerLoading, setJobTriggerLoading] = useState<boolean>(false)
-
   // Load certificates
   const fetchCertificates = async () => {
     setLoading(true)
@@ -359,32 +354,6 @@ export function KmsCertificatesPage() {
     }
   }
 
-  // Handle Simulator Job Trigger
-  const handleTriggerJob = async () => {
-    setJobTriggerLoading(true)
-    try {
-      await triggerKmsRevocationJob()
-      setAlert({
-        type: 'indigo',
-        message:
-          'KMS Simulator job executed: random GOOD certs revoked / HOLD certs unrevoked. RabbitMQ events published.',
-      })
-      setTimeout(() => {
-        fetchCertificates()
-        setJobTriggerLoading(false)
-      }, 500)
-    } catch (err: any) {
-      setAlert({
-        type: 'red',
-        message:
-          err?.response?.data?.error ||
-          err?.message ||
-          'Failed to trigger revocation job',
-      })
-      setJobTriggerLoading(false)
-    }
-  }
-
   // Details modal
   const openDetailsModal = (cert: KmsCertificate) => {
     setDetailsCert(cert)
@@ -406,8 +375,8 @@ export function KmsCertificatesPage() {
             </Title>
           </Group>
           <Text fz="sm" c="dimmed" mt={4}>
-            Source of truth certificate inventory — Incert Test PKI simulation
-            with Transactional Outbox event publishing
+            Certificate inventory issued by your own CAs — revoke, hold and
+            reinstate with Transactional Outbox event publishing
           </Text>
         </Box>
 
@@ -419,17 +388,6 @@ export function KmsCertificatesPage() {
             disabled={loading}
           >
             Refresh
-          </Button>
-
-          <Button
-            leftSection={<IconPlayerPlay size={16} />}
-            onClick={handleTriggerJob}
-            loading={jobTriggerLoading}
-            style={{
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            }}
-          >
-            Run Revocation Job
           </Button>
         </Group>
       </Group>

@@ -21,8 +21,10 @@ import {
   IconBook,
   IconExternalLink,
   IconKey,
+  IconShieldCheck,
 } from '@tabler/icons-react'
 import { KmsCertificatesPage } from './pages/KmsCertificatesPage'
+import { CertificateAuthoritiesPage } from './pages/CertificateAuthoritiesPage'
 import { OutboxMonitorPage } from './pages/OutboxMonitorPage'
 import { DeploymentDocsPage } from './pages/DeploymentDocsPage'
 
@@ -30,8 +32,14 @@ const NAV_ITEMS = [
   {
     to: '/',
     label: 'Certificate Inventory',
-    description: 'Issue, revoke, hold & reinstate PKI certificates',
+    description: 'Revoke, hold & reinstate issued certificates',
     icon: IconCertificate,
+  },
+  {
+    to: '/cas',
+    label: 'Certificate Authorities',
+    description: 'Create CAs & issue certificates from CSRs',
+    icon: IconShieldCheck,
   },
   {
     to: '/outbox',
@@ -207,6 +215,7 @@ export default function App() {
       <AppShell.Main>
         <Routes>
           <Route path="/" element={<KmsCertificatesPage />} />
+          <Route path="/cas" element={<CertificateAuthoritiesPage />} />
           <Route path="/outbox" element={<OutboxMonitorPage />} />
           <Route path="/docs" element={<DeploymentDocsPage />} />
         </Routes>

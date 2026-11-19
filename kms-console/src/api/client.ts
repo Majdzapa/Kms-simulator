@@ -1,6 +1,10 @@
 import axios from 'axios'
 import type {
+  CreateCaRequest,
+  IssueCertificateRequest,
+  IssuedCertificate,
   KmsCertificate,
+  KmsCertificateAuthority,
   KmsRevocationReason,
   KmsSyncStatus,
 } from '../types/api'
@@ -62,9 +66,25 @@ export async function syncAllKmsCertificates(): Promise<{
   return data
 }
 
-export async function triggerKmsRevocationJob(): Promise<{ status: string }> {
-  const { data } = await kmsApi.post<{ status: string }>(
-    '/api/kms/certificates/trigger-revocation'
+export async function getCertificateAuthorities(): Promise<KmsCertificateAuthority[]> {
+  const { data } = await kmsApi.get<KmsCertificateAuthority[]>('/api/kms/cas')
+  return data
+}
+
+export async function createCertificateAuthority(
+  req: CreateCaRequest
+): Promise<KmsCertificateAuthority> {
+  const { data } = await kmsApi.post<KmsCertificateAuthority>('/api/kms/cas', req)
+  return data
+}
+
+export async function issueKmsCertificate(
+  caId: number,
+  req: IssueCertificateRequest
+): Promise<IssuedCertificate> {
+  const { data } = await kmsApi.post<IssuedCertificate>(
+    `/api/kms/cas/${caId}/certificates`,
+    req
   )
   return data
 }

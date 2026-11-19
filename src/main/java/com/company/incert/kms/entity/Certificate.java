@@ -62,6 +62,10 @@ public class Certificate {
     @Column(name = "sequence", nullable = false)
     private long sequence;
 
+    /** Issuing CA when the certificate was issued by this KMS; null for externally imported certificates. */
+    @Column(name = "ca_id")
+    private Long caId;
+
     @Transient
     private CertificateStatus loadedStatus;
 
