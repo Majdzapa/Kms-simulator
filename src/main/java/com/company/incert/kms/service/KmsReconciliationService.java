@@ -1,6 +1,7 @@
 package com.company.incert.kms.service;
 
 import com.company.incert.kms.entity.Certificate;
+import com.company.incert.kms.entity.CertificateStatusEvent;
 import com.company.incert.kms.entity.OutboxEvent;
 import com.company.incert.kms.messaging.CertificateEventPublisher;
 import com.company.incert.kms.messaging.OutboxManifestEvent;
@@ -42,6 +43,9 @@ public class KmsReconciliationService {
 
     @Value("${kms.rabbitmq.exchange:incert.certificate.status}")
     private String exchange;
+
+    @Value("${kms.rabbitmq.routing-key:incert.certificate.status.v1}")
+    private String statusRoutingKey;
 
     @Value("${kms.rabbitmq.reconciliation-manifest-routing-key:incert.reconciliation.manifest.v1}")
     private String manifestRoutingKey;
@@ -146,16 +150,42 @@ public class KmsReconciliationService {
         if (!serials.isEmpty()) {
             List<OutboxEvent> allOutbox = outboxRepository.findAll();
             for (String serial : serials) {
+                if (serial == null || serial.isBlank()) {
+                    continue;
+                }
                 String clean = serial.trim().toLowerCase();
-                allOutbox.stream()
-                        .filter(ev -> ev.getEventKey() != null && ev.getEventKey().toLowerCase().endsWith(":" + clean))
-                        .max(Comparator.comparing(OutboxEvent::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
-                        .ifPresent(ev -> {
-                            eventPublisher.publish(ev.getEventId(), ev.getTopic(), ev.getEventKey(), ev.getPayload());
-                            ev.setSent(true);
-                            ev.setSentAt(Instant.now());
-                            outboxRepository.save(ev);
-                        });
+                Optional<Certificate> certOpt = revocationService.findBySerial(clean);
+                String expectedKey = certOpt
+                        .map(c -> (c.getIssuerKeyHashHex() + ":" + c.getSerialNumberHex()).toLowerCase())
+                        .orElse(null);
+
+                Optional<OutboxEvent> latestOutbox = allOutbox.stream()
+                        .filter(ev -> {
+                            if (ev.getEventKey() == null) return false;
+                            String keyLower = ev.getEventKey().toLowerCase();
+                            return keyLower.endsWith(":" + clean)
+                                    || (expectedKey != null && keyLower.equals(expectedKey));
+                        })
+                        .max(Comparator.comparing(OutboxEvent::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder())));
+
+                if (latestOutbox.isPresent()) {
+                    OutboxEvent ev = latestOutbox.get();
+                    eventPublisher.publish(ev.getEventId(), ev.getTopic(), ev.getEventKey(), ev.getPayload());
+                    ev.setSent(true);
+                    ev.setSentAt(Instant.now());
+                    outboxRepository.save(ev);
+                    replayedEvents++;
+                } else if (certOpt.isPresent()) {
+                    // Serial exists in certificate table but has no row in outbox_event:
+                    // synthesize a new OutboxEvent from the current Certificate state, persist, and publish it.
+                    Certificate cert = certOpt.get();
+                    OutboxEvent created = createAndPublishOutboxEventForCertificate(cert);
+                    if (created != null) {
+                        replayedEvents++;
+                    }
+                } else {
+                    log.warn("Requested replay for serial={}, but it does not exist in outbox_event or certificate table", clean);
+                }
             }
         } else if (eventIds.isEmpty()) {
             // Full replay requested
@@ -165,6 +195,37 @@ public class KmsReconciliationService {
         outboxRelay.relay();
         log.info("Processed RabbitMQ reconciliation replay: replayedEvents={} requestedSerials={}",
                 replayedEvents, serials.size());
+    }
+
+    private OutboxEvent createAndPublishOutboxEventForCertificate(Certificate cert) {
+        try {
+            CertificateStatusEvent statusEvent = CertificateStatusEvent.from(cert);
+            String payload = objectMapper.writeValueAsString(statusEvent);
+            String topic = (statusRoutingKey != null && !statusRoutingKey.isBlank())
+                    ? statusRoutingKey
+                    : "incert.certificate.status.v1";
+            String eventKey = cert.getIssuerKeyHashHex() + ":" + cert.getSerialNumberHex();
+            Instant now = Instant.now();
+
+            OutboxEvent outbox = OutboxEvent.builder()
+                    .eventId(statusEvent.eventId())
+                    .topic(topic)
+                    .eventKey(eventKey)
+                    .payload(payload)
+                    .createdAt(now)
+                    .sent(true)
+                    .sentAt(now)
+                    .build();
+
+            outboxRepository.save(outbox);
+            eventPublisher.publish(outbox.getEventId(), outbox.getTopic(), outbox.getEventKey(), outbox.getPayload());
+            log.info("Synthesized and published missing outbox event id={} for serial={}",
+                    outbox.getEventId(), cert.getSerialNumberHex());
+            return outbox;
+        } catch (Exception e) {
+            log.error("Failed to synthesize outbox event for serial={}: {}", cert.getSerialNumberHex(), e.getMessage());
+            return null;
+        }
     }
 }
 
